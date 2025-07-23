@@ -1,0 +1,35 @@
+# Prometheus configuration for Compliance Agent monitoring
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files: []
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+          # - alertmanager:9093
+
+scrape_configs:
+  # Compliance Agent Metrics
+  - job_name: 'compliance-agent'
+    static_configs:
+      - targets: ['compliance-agent:9090']
+    scrape_interval: 30s
+    metrics_path: /metrics
+    scheme: http
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # PostgreSQL metrics (if postgres_exporter is used)
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #   scrape_interval: 30s
+  #   scheme: http
+

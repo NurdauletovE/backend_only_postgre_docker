@@ -1,0 +1,109 @@
+{
+  "scan_date": "2025-07-18T23:17:59.188835",
+  "system": {
+    "PRETTY_NAME": "Ubuntu 24.04.2 LTS",
+    "NAME": "Ubuntu",
+    "VERSION_ID": "24.04",
+    "VERSION": "24.04.2 LTS (Noble Numbat)",
+    "VERSION_CODENAME": "noble",
+    "ID": "ubuntu",
+    "ID_LIKE": "debian",
+    "HOME_URL": "https://www.ubuntu.com/",
+    "SUPPORT_URL": "https://help.ubuntu.com/",
+    "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+    "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+    "UBUNTU_CODENAME": "noble",
+    "LOGO": "ubuntu-logo"
+  },
+  "checks": {
+    "password_policy": {
+      "password_complexity": {
+        "status": "PASS",
+        "details": "Password complexity checking via pam_pwquality",
+        "evidence": "/etc/pam.d/common-password:password\trequisite\t\t\tpam_pwquality.so retry=3"
+      },
+      "password_aging": {
+        "status": "PASS",
+        "details": "Password aging policy configuration",
+        "evidence": "PASS_WARN_AGE\t7"
+      }
+    },
+    "file_permissions": {
+      "permissions__etc_passwd": {
+        "status": "PASS",
+        "details": "File permissions for /etc/passwd",
+        "evidence": "Expected: 0o644, Actual: 0o644"
+      },
+      "permissions__etc_shadow": {
+        "status": "PASS",
+        "details": "File permissions for /etc/shadow",
+        "evidence": "Expected: 0o640, Actual: 0o640"
+      },
+      "permissions__etc_group": {
+        "status": "PASS",
+        "details": "File permissions for /etc/group",
+        "evidence": "Expected: 0o644, Actual: 0o644"
+      },
+      "permissions__etc_gshadow": {
+        "status": "PASS",
+        "details": "File permissions for /etc/gshadow",
+        "evidence": "Expected: 0o640, Actual: 0o640"
+      }
+    },
+    "ssh_configuration": {
+      "ssh_root_login": {
+        "status": "PASS",
+        "details": "SSH root login should be disabled",
+        "evidence": "PermitRootLogin no"
+      },
+      "ssh_password_auth": {
+        "status": "INFO",
+        "details": "SSH password authentication configuration",
+        "evidence": ""
+      },
+      "ssh_protocol": {
+        "status": "PASS",
+        "details": "SSH protocol version (Protocol 2 is default in modern SSH)",
+        "evidence": ""
+      }
+    },
+    "firewall_status": {
+      "ufw_firewall": {
+        "status": "PASS",
+        "details": "UFW firewall should be active",
+        "evidence": "Status: active"
+      },
+      "iptables_rules": {
+        "status": "INFO",
+        "details": "Current iptables rules",
+        "evidence": "Rules count: 1"
+      }
+    },
+    "system_updates": {
+      "system_updates": {
+        "status": "WARN",
+        "details": "System should be up to date",
+        "evidence": "41 updates available"
+      }
+    },
+    "user_accounts": {
+      "uid_zero_users": {
+        "status": "PASS",
+        "details": "Only root should have UID 0",
+        "evidence": "Users with UID 0: root"
+      },
+      "empty_passwords": {
+        "status": "PASS",
+        "details": "No accounts should have empty passwords",
+        "evidence": "Accounts with empty passwords: None"
+      }
+    }
+  },
+  "summary": {
+    "total_checks": 14,
+    "passed": 11,
+    "failed": 0,
+    "warnings": 1,
+    "compliance_percentage": 78.57
+  }
+}

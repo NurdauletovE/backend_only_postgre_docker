@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for compliance data - DEPLOYED FIRST
+  postgres:
+    image: postgres:15-alpine
+    container_name: compliance-postgres
+    environment:
+      POSTGRES_DB: compliance_db
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-compliance_secure_db_password_2024}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./config/postgres/setup-auth.sh:/docker-entrypoint-initdb.d/02-setup-auth.sh:ro
+    ports:
+      - "5440:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_db -h localhost -p 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # Database initialization check service
+  db-init-check:
+    image: postgres:15-alpine
+    container_name: compliance-db-init
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-compliance_secure_db_password_2024}
+    command: >
+      sh -c "
+        echo 'Waiting for PostgreSQL to be ready...'
+        until pg_isready -h postgres -p 5432 -U compliance -d compliance_db; do
+          echo 'PostgreSQL is unavailable - sleeping'
+          sleep 2
+        done
+        echo 'PostgreSQL is up - checking database initialization...'
+        until psql -h postgres -U compliance -d compliance_db -c 'SELECT 1 FROM systems LIMIT 1;' > /dev/null 2>&1; do
+          echo 'Database not initialized - sleeping'
+          sleep 2
+        done
+        echo 'Database is ready and initialized!'
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - compliance-network
+
+  # Compliance Agent Application - WAITS FOR DATABASE
+  compliance-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: compliance-agent
+    environment:
+      # Database Configuration
+      DATABASE_URL: postgresql://compliance:${POSTGRES_PASSWORD:-compliance_secure_db_password_2024}@postgres:5432/compliance_db
+      AUTO_MIGRATE: "false"  # Schema already initialized
+      
+      # JWT Configuration
+      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_ALGORITHM: RS256
+      JWT_ISSUER: compliance-agent
+      JWT_AUDIENCE: compliance-authority
+      KEY_PASSPHRASE: ${JWT_KEY_PASSPHRASE:-compliance_secure_key_2024}
+      
+      # OpenSCAP Configuration
+      OPENSCAP_CONTENT_PATH: /usr/share/xml/scap/ssg/content/
+      DEFAULT_SCAN_PROFILE: xccdf_org.ssgproject.content_profile_cis
+      DEFAULT_DATASTREAM: ssg-debian12-ds.xml
+      
+      # Scheduling Configuration
+      SCAN_INTERVAL: 3600
+      MAX_CONCURRENT_SCANS: 3
+      
+      # API Configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_CORS_ORIGINS: "https://compliance.example.com"
+      
+      # Monitoring Configuration
+      PROMETHEUS_PORT: 9090
+      ENABLE_METRICS: "true"
+      
+      # Logging Configuration
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+      
+      # Security Configuration
+      RATE_LIMIT_PER_MINUTE: 60
+      MAX_TOKEN_AGE_HOURS: 24
+      ENVIRONMENT: development
+    volumes:
+      - ./keys:/app/keys:ro
+      - compliance_logs:/app/logs
+      - compliance_results:/app/scan_results
+    ports:
+      - "8002:8000"   # API port
+      - "9092:9090"   # Prometheus metrics port
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-init-check:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # Give more time for startup
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # Prometheus for metrics collection - WAITS FOR COMPLIANCE AGENT
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: compliance-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9096:9090"
+    depends_on:
+      compliance-agent:
+        condition: service_healthy
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # Grafana for metrics visualization - WAITS FOR PROMETHEUS
+  grafana:
+    image: grafana/grafana:latest
+    container_name: compliance-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin_password_2024}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3003:3000"
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  postgres_data:
+    driver: local
+  compliance_logs:
+    driver: local
+  compliance_results:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Custom network
+networks:
+  compliance-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16

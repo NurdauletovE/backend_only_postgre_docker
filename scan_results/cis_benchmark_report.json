@@ -1,0 +1,323 @@
+{
+  "scan_date": "2025-07-18T23:22:55.007865",
+  "benchmark": "CIS Ubuntu Linux 22.04 LTS Benchmark v1.0.0",
+  "system": {
+    "PRETTY_NAME": "Ubuntu 24.04.2 LTS",
+    "NAME": "Ubuntu",
+    "VERSION_ID": "24.04",
+    "VERSION": "24.04.2 LTS (Noble Numbat)",
+    "VERSION_CODENAME": "noble",
+    "ID": "ubuntu",
+    "ID_LIKE": "debian",
+    "HOME_URL": "https://www.ubuntu.com/",
+    "SUPPORT_URL": "https://help.ubuntu.com/",
+    "BUG_REPORT_URL": "https://bugs.launchpad.net/ubuntu/",
+    "PRIVACY_POLICY_URL": "https://www.ubuntu.com/legal/terms-and-policies/privacy-policy",
+    "UBUNTU_CODENAME": "noble",
+    "LOGO": "ubuntu-logo"
+  },
+  "checks": {
+    "1_1_filesystem_configuration": {
+      "1.1.1_cramfs_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of cramfs filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/drivers/mtd/mtd.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/fs/cramfs/cramfs.ko.zst",
+        "remediation": "echo \"install cramfs /bin/true\" >> /etc/modprobe.d/cramfs.conf"
+      },
+      "1.1.1_freevxfs_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of freevxfs filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/fs/freevxfs/freevxfs.ko.zst",
+        "remediation": "echo \"install freevxfs /bin/true\" >> /etc/modprobe.d/freevxfs.conf"
+      },
+      "1.1.1_jffs2_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of jffs2 filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/drivers/mtd/mtd.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/fs/jffs2/jffs2.ko.zst",
+        "remediation": "echo \"install jffs2 /bin/true\" >> /etc/modprobe.d/jffs2.conf"
+      },
+      "1.1.1_hfs_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of hfs filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/fs/hfs/hfs.ko.zst",
+        "remediation": "echo \"install hfs /bin/true\" >> /etc/modprobe.d/hfs.conf"
+      },
+      "1.1.1_hfsplus_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of hfsplus filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/fs/hfsplus/hfsplus.ko.zst",
+        "remediation": "echo \"install hfsplus /bin/true\" >> /etc/modprobe.d/hfsplus.conf"
+      },
+      "1.1.1_squashfs_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of squashfs filesystems is disabled",
+        "evidence": "",
+        "remediation": "echo \"install squashfs /bin/true\" >> /etc/modprobe.d/squashfs.conf"
+      },
+      "1.1.1_udf_disabled": {
+        "status": "FAIL",
+        "details": "Ensure mounting of udf filesystems is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/lib/crc-itu-t.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/fs/udf/udf.ko.zst",
+        "remediation": "echo \"install udf /bin/true\" >> /etc/modprobe.d/udf.conf"
+      },
+      "1.1.2_tmp_partition": {
+        "status": "FAIL",
+        "details": "Ensure /tmp is configured as separate partition",
+        "evidence": "",
+        "remediation": "Configure /tmp as separate partition or tmpfs"
+      }
+    },
+    "1_2_software_updates": {
+      "1.2.1_package_repositories": {
+        "status": "PASS",
+        "details": "Ensure package manager repositories are configured",
+        "evidence": "Repository sources configured: True",
+        "remediation": "Configure /etc/apt/sources.list and /etc/apt/sources.list.d/"
+      },
+      "1.2.2_gpg_keys": {
+        "status": "PASS",
+        "details": "Ensure GPG keys are configured",
+        "evidence": "GPG keys present: True",
+        "remediation": "Configure GPG keys for package verification"
+      }
+    },
+    "1_3_filesystem_integrity": {
+      "1.3.1_aide_installed": {
+        "status": "FAIL",
+        "details": "Ensure AIDE is installed",
+        "evidence": "AIDE installed: False",
+        "remediation": "apt install aide aide-common"
+      }
+    },
+    "1_4_secure_boot": {
+      "1.4.1_grub_permissions__boot_grub_grub.cfg": {
+        "status": "FAIL",
+        "details": "Ensure permissions on /boot/grub/grub.cfg are configured",
+        "evidence": "Mode: expected 0o400, got 0o600",
+        "remediation": "chown root:root /boot/grub/grub.cfg; chmod 400 /boot/grub/grub.cfg"
+      },
+      "1.4.2_bootloader_password": {
+        "status": "FAIL",
+        "details": "Ensure bootloader password is set",
+        "evidence": "Bootloader password set: False",
+        "remediation": "Configure GRUB password in /etc/grub.d/40_custom"
+      }
+    },
+    "3_x_network_configuration": {
+      "3.1.1_dccp_disabled": {
+        "status": "FAIL",
+        "details": "Ensure dccp is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/net/dccp/dccp.ko.zst",
+        "remediation": "echo \"install dccp /bin/true\" >> /etc/modprobe.d/dccp.conf"
+      },
+      "3.1.1_sctp_disabled": {
+        "status": "FAIL",
+        "details": "Ensure sctp is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/net/ipv4/udp_tunnel.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/net/ipv6/ip6_udp_tunnel.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/net/sctp/sctp.ko.zst",
+        "remediation": "echo \"install sctp /bin/true\" >> /etc/modprobe.d/sctp.conf"
+      },
+      "3.1.1_rds_disabled": {
+        "status": "FAIL",
+        "details": "Ensure rds is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/net/rds/rds.ko.zst",
+        "remediation": "echo \"install rds /bin/true\" >> /etc/modprobe.d/rds.conf"
+      },
+      "3.1.1_tipc_disabled": {
+        "status": "FAIL",
+        "details": "Ensure tipc is disabled",
+        "evidence": "insmod /lib/modules/6.11.0-29-generic/kernel/net/ipv4/udp_tunnel.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/net/ipv6/ip6_udp_tunnel.ko.zst \ninsmod /lib/modules/6.11.0-29-generic/kernel/net/tipc/tipc.ko.zst",
+        "remediation": "echo \"install tipc /bin/true\" >> /etc/modprobe.d/tipc.conf"
+      },
+      "3.2.1_net_ipv4_conf_all_accept_source_route": {
+        "status": "PASS",
+        "details": "Ensure net.ipv4.conf.all.accept_source_route is set to 0",
+        "evidence": "Current value: 0",
+        "remediation": "sysctl -w net.ipv4.conf.all.accept_source_route=0"
+      },
+      "3.2.1_net_ipv4_conf_default_accept_source_route": {
+        "status": "FAIL",
+        "details": "Ensure net.ipv4.conf.default.accept_source_route is set to 0",
+        "evidence": "Current value: 1",
+        "remediation": "sysctl -w net.ipv4.conf.default.accept_source_route=0"
+      },
+      "3.2.1_net_ipv6_conf_all_accept_source_route": {
+        "status": "PASS",
+        "details": "Ensure net.ipv6.conf.all.accept_source_route is set to 0",
+        "evidence": "Current value: 0",
+        "remediation": "sysctl -w net.ipv6.conf.all.accept_source_route=0"
+      },
+      "3.2.1_net_ipv6_conf_default_accept_source_route": {
+        "status": "PASS",
+        "details": "Ensure net.ipv6.conf.default.accept_source_route is set to 0",
+        "evidence": "Current value: 0",
+        "remediation": "sysctl -w net.ipv6.conf.default.accept_source_route=0"
+      },
+      "3.3.1_net_ipv6_conf_all_accept_ra": {
+        "status": "FAIL",
+        "details": "Ensure net.ipv6.conf.all.accept_ra is set to 0",
+        "evidence": "Current value: 1",
+        "remediation": "sysctl -w net.ipv6.conf.all.accept_ra=0"
+      },
+      "3.3.1_net_ipv6_conf_default_accept_ra": {
+        "status": "FAIL",
+        "details": "Ensure net.ipv6.conf.default.accept_ra is set to 0",
+        "evidence": "Current value: 1",
+        "remediation": "sysctl -w net.ipv6.conf.default.accept_ra=0"
+      }
+    },
+    "4_x_logging_and_auditing": {
+      "4.1.1_auditd_enabled": {
+        "status": "FAIL",
+        "details": "Ensure auditing is enabled",
+        "evidence": "Auditd status: not-found",
+        "remediation": "systemctl enable auditd"
+      },
+      "4.2.1_rsyslog_installed": {
+        "status": "PASS",
+        "details": "Ensure rsyslog is installed",
+        "evidence": "Rsyslog installed: True",
+        "remediation": "apt install rsyslog"
+      },
+      "4.2.2_rsyslog_enabled": {
+        "status": "PASS",
+        "details": "Ensure rsyslog Service is enabled",
+        "evidence": "Rsyslog status: enabled",
+        "remediation": "systemctl enable rsyslog"
+      },
+      "4.2.3_rsyslog_permissions": {
+        "status": "PASS",
+        "details": "Ensure rsyslog default file permissions configured",
+        "evidence": "File permissions: # /etc/rsyslog.conf configuration file for rsyslog\n#\n# For more information install rsyslog-doc and see\n# /usr/share/doc/rsyslog-doc/html/configuration/index.html\n#\n# Default logging rules can be found in /etc/rsyslog.d/50-default.conf\n\n\n#################\n#### MODULES ####\n#################\n\nmodule(load=\"imuxsock\") # provides support for local system logging\n#module(load=\"immark\")  # provides --MARK-- message capability\n\n# provides UDP syslog reception\n#module(load=\"imudp\")\n#input(type=\"imudp\" port=\"514\")\n\n# provides TCP syslog reception\n#module(load=\"imtcp\")\n#input(type=\"imtcp\" port=\"514\")\n\n# provides kernel logging support and enable non-kernel klog messages\nmodule(load=\"imklog\" permitnonkernelfacility=\"on\")\n\n###########################\n#### GLOBAL DIRECTIVES ####\n###########################\n\n# Filter duplicated messages\n$RepeatedMsgReduction on\n\n#\n# Set the default permissions for all log files.\n#\n$FileOwner syslog\n$FileGroup adm\n$FileCreateMode 0640\n$DirCreateMode 0755\n$Umask 0022\n$PrivDropToUser syslog\n$PrivDropToGroup syslog\n\n#\n# Where to place spool and state files\n#\n$WorkDirectory /var/spool/rsyslog\n\n#\n# Include all config files in /etc/rsyslog.d/\n#\n$IncludeConfig /etc/rsyslog.d/*.conf",
+        "remediation": "Add \"$FileCreateMode 0640\" to /etc/rsyslog.conf"
+      }
+    },
+    "5_x_access_control": {
+      "5.1.1_cron_enabled": {
+        "status": "PASS",
+        "details": "Ensure cron daemon is enabled",
+        "evidence": "Cron status: enabled",
+        "remediation": "systemctl enable cron"
+      },
+      "5.1.2_crontab_permissions": {
+        "status": "FAIL",
+        "details": "Ensure permissions on /etc/crontab are configured",
+        "evidence": "Mode: expected 0o600, got 0o644",
+        "remediation": "chown root:root /etc/crontab; chmod 600 /etc/crontab"
+      },
+      "5.2.1_sshd_config_permissions": {
+        "status": "FAIL",
+        "details": "Ensure permissions on /etc/ssh/sshd_config are configured",
+        "evidence": "Mode: expected 0o600, got 0o644",
+        "remediation": "chown root:root /etc/ssh/sshd_config; chmod 600 /etc/ssh/sshd_config"
+      },
+      "5.2.2_ssh_access_limited": {
+        "status": "WARN",
+        "details": "Ensure SSH access is limited",
+        "evidence": "SSH access controls configured: False",
+        "remediation": "Configure AllowUsers, AllowGroups, DenyUsers, or DenyGroups in sshd_config"
+      },
+      "5.2.3_ssh_private_key__etc_ssh_ssh_host_ecdsa_key": {
+        "status": "PASS",
+        "details": "Ensure permissions on /etc/ssh/ssh_host_ecdsa_key are configured",
+        "evidence": "Correct permissions: 0o600 root:root",
+        "remediation": "chown root:root /etc/ssh/ssh_host_ecdsa_key; chmod 600 /etc/ssh/ssh_host_ecdsa_key"
+      },
+      "5.2.3_ssh_private_key__etc_ssh_ssh_host_ed25519_key": {
+        "status": "PASS",
+        "details": "Ensure permissions on /etc/ssh/ssh_host_ed25519_key are configured",
+        "evidence": "Correct permissions: 0o600 root:root",
+        "remediation": "chown root:root /etc/ssh/ssh_host_ed25519_key; chmod 600 /etc/ssh/ssh_host_ed25519_key"
+      },
+      "5.2.3_ssh_private_key__etc_ssh_ssh_host_rsa_key": {
+        "status": "PASS",
+        "details": "Ensure permissions on /etc/ssh/ssh_host_rsa_key are configured",
+        "evidence": "Correct permissions: 0o600 root:root",
+        "remediation": "chown root:root /etc/ssh/ssh_host_rsa_key; chmod 600 /etc/ssh/ssh_host_rsa_key"
+      }
+    },
+    "5_x_authentication": {
+      "5.3.1_password_requirements": {
+        "status": "FAIL",
+        "details": "Ensure password creation requirements are configured",
+        "evidence": "Password requirements configured: False",
+        "remediation": "Configure password complexity in /etc/security/pwquality.conf"
+      },
+      "5.3.2_password_lockout": {
+        "status": "FAIL",
+        "details": "Ensure lockout for failed password attempts is configured",
+        "evidence": "Account lockout configured: False",
+        "remediation": "Configure pam_faillock in PAM configuration"
+      },
+      "5.3.3_password_reuse": {
+        "status": "FAIL",
+        "details": "Ensure password reuse is limited",
+        "evidence": "Password history configured: False",
+        "remediation": "Configure password history in /etc/pam.d/common-password"
+      },
+      "5.3.4_password_hashing": {
+        "status": "PASS",
+        "details": "Ensure password hashing algorithm is SHA-512",
+        "evidence": "SHA-512 hashing configured: True",
+        "remediation": "Set ENCRYPT_METHOD SHA512 in /etc/login.defs"
+      }
+    },
+    "6_x_system_maintenance": {
+      "6.1.1_permissions__etc_passwd": {
+        "status": "PASS",
+        "details": "Audit system file permissions for /etc/passwd",
+        "evidence": "Correct permissions: 0o644 root:root",
+        "remediation": "chown root:root /etc/passwd; chmod 0o644 /etc/passwd"
+      },
+      "6.1.1_permissions__etc_shadow": {
+        "status": "FAIL",
+        "details": "Audit system file permissions for /etc/shadow",
+        "evidence": "Group: expected root, got shadow",
+        "remediation": "chown root:root /etc/shadow; chmod 0o640 /etc/shadow"
+      },
+      "6.1.1_permissions__etc_group": {
+        "status": "PASS",
+        "details": "Audit system file permissions for /etc/group",
+        "evidence": "Correct permissions: 0o644 root:root",
+        "remediation": "chown root:root /etc/group; chmod 0o644 /etc/group"
+      },
+      "6.1.1_permissions__etc_gshadow": {
+        "status": "FAIL",
+        "details": "Audit system file permissions for /etc/gshadow",
+        "evidence": "Group: expected root, got shadow",
+        "remediation": "chown root:root /etc/gshadow; chmod 0o640 /etc/gshadow"
+      },
+      "6.1.2_world_writable_files": {
+        "status": "FAIL",
+        "details": "Ensure no world writable files exist",
+        "evidence": "World writable files found: 1",
+        "remediation": "Review and fix permissions on world writable files"
+      },
+      "6.1.3_unowned_files": {
+        "status": "FAIL",
+        "details": "Ensure no unowned files or directories exist",
+        "evidence": "Unowned files found: 7126",
+        "remediation": "Review and assign ownership to unowned files"
+      },
+      "6.2.1_empty_passwords": {
+        "status": "PASS",
+        "details": "Ensure password fields are not empty",
+        "evidence": "Users with empty passwords: ",
+        "remediation": "Set passwords for users with empty password fields"
+      },
+      "6.2.2_legacy_passwd_entries": {
+        "status": "PASS",
+        "details": "Ensure no legacy \"+\" entries exist in /etc/passwd",
+        "evidence": "Legacy entries found: False",
+        "remediation": "Remove legacy \"+\" entries from /etc/passwd"
+      }
+    }
+  },
+  "summary": {
+    "total_checks": 46,
+    "passed": 17,
+    "failed": 28,
+    "warnings": 1,
+    "errors": 0,
+    "compliance_percentage": 36.96
+  }
+}
