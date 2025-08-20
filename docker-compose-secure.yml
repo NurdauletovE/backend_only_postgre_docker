@@ -1,0 +1,287 @@
+version: '3.8'
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  grafana_admin_password:
+    file: ./secrets/grafana_password.txt
+  jwt_private_key:
+    file: ./keys/private_unencrypted.pem
+
+services:
+  # PostgreSQL database - Internal only
+  postgres:
+    image: postgres:15-alpine
+    container_name: compliance-postgres
+    secrets:
+      - postgres_password
+    environment:
+      POSTGRES_DB: compliance_db
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./config/postgres/setup-auth.sh:/docker-entrypoint-initdb.d/02-setup-auth.sh:ro
+    # No ports exposed - internal only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_db -h localhost -p 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Database initialization check
+  db-init-check:
+    image: postgres:15-alpine
+    container_name: compliance-db-init
+    secrets:
+      - postgres_password
+    environment:
+      PGPASSFILE: /run/secrets/postgres_password
+    command: >
+      sh -c "
+        export PGPASSWORD=$(cat /run/secrets/postgres_password)
+        echo 'Waiting for PostgreSQL to be ready...'
+        until pg_isready -h postgres -p 5432 -U compliance -d compliance_db; do
+          echo 'PostgreSQL is unavailable - sleeping'
+          sleep 2
+        done
+        echo 'PostgreSQL is up - checking database initialization...'
+        until psql -h postgres -U compliance -d compliance_db -c 'SELECT 1 FROM systems LIMIT 1;' > /dev/null 2>&1; do
+          echo 'Database not initialized - sleeping'
+          sleep 2
+        done
+        echo 'Database is ready and initialized!'
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - internal
+
+  # FastAPI Application
+  compliance-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: compliance-api
+    secrets:
+      - postgres_password
+      - jwt_private_key
+    environment:
+      # Database Configuration
+      DATABASE_URL_FILE: /run/secrets/database_url
+      
+      # JWT Configuration
+      JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private_key
+      JWT_PUBLIC_KEY_PATH: /app/keys/public_unencrypted.pem
+      JWT_ALGORITHM: RS256
+      JWT_ISSUER: compliance-agent
+      JWT_AUDIENCE: compliance-authority
+      
+      # API Configuration
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      API_CORS_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
+      
+      # Logging Configuration
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: json
+      
+      # Security Configuration
+      RATE_LIMIT_PER_MINUTE: 60
+      MAX_TOKEN_AGE_HOURS: 24
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      
+      # Security headers
+      SESSION_COOKIE_SECURE: "true"
+      SESSION_COOKIE_HTTPONLY: "true"
+      SESSION_COOKIE_SAMESITE: strict
+    volumes:
+      - ./keys:/app/keys:ro
+      - compliance_logs:/app/logs
+    ports:
+      - "127.0.0.1:8003:8000"   # Only bind to localhost
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - internal
+      - external
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    entrypoint: >
+      sh -c "
+        export DATABASE_URL=postgresql://compliance:$$(cat /run/secrets/postgres_password)@postgres:5432/compliance_db
+        exec /entrypoint.sh python /app/src/api_main.py
+      "
+
+  # Compliance Agent Service
+  compliance-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: compliance-agent
+    secrets:
+      - postgres_password
+    environment:
+      DATABASE_URL_FILE: /run/secrets/database_url
+      JWT_PRIVATE_KEY_PATH: /app/keys/private_unencrypted.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public_unencrypted.pem
+      OPENSCAP_CONTENT_PATH: /usr/share/xml/scap/ssg/content/
+      DEFAULT_SCAN_PROFILE: xccdf_org.ssgproject.content_profile_cis
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-3600}
+      MAX_CONCURRENT_SCANS: 3
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./keys:/app/keys:ro
+      - compliance_logs:/app/logs
+      - compliance_results:/app/results
+      - /usr/share/xml/scap:/usr/share/xml/scap:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      compliance-api:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+    entrypoint: >
+      sh -c "
+        export DATABASE_URL=postgresql://compliance:$$(cat /run/secrets/postgres_password)@postgres:5432/compliance_db
+        exec python /app/src/main.py
+      "
+
+  # Prometheus - Internal only
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: compliance-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    # No ports exposed - access through reverse proxy if needed
+    depends_on:
+      compliance-api:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: compliance-grafana
+    secrets:
+      - grafana_admin_password
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD_FILE: /run/secrets/grafana_admin_password
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3004}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_COOKIE_SECURE: "true"
+      GF_SECURITY_COOKIE_HTTPONLY: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: "true"
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: "true"
+      GF_SECURITY_X_XSS_PROTECTION: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3004:3000"  # Only bind to localhost
+    depends_on:
+      prometheus:
+        condition: service_started
+    networks:
+      - internal
+      - external
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+
+  # Nginx Reverse Proxy (Optional - for production)
+  nginx:
+    image: nginx:alpine
+    container_name: compliance-nginx
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - compliance-api
+      - grafana
+    networks:
+      - external
+    restart: unless-stopped
+    profiles:
+      - production
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+# Named volumes
+volumes:
+  postgres_data:
+    driver: local
+  compliance_logs:
+    driver: local
+  compliance_results:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# Networks
+networks:
+  internal:
+    driver: bridge
+    internal: true  # No external access
+  external:
+    driver: bridge

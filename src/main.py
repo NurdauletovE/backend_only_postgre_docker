@@ -48,7 +48,7 @@ class ComplianceAgentApplication:
             # Initialize logging first
             log_level = os.getenv('LOG_LEVEL', 'INFO')
             log_format = os.getenv('LOG_FORMAT', 'json')
-            log_file = os.getenv('LOG_FILE', '/app/logs/compliance-agent.log')
+            log_file = os.getenv('LOG_FILE')  # Don't default to file path
             
             initialize_logging(log_level, log_format, log_file)
             self.logger = get_logger(__name__)

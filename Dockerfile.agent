@@ -1,0 +1,98 @@
+# Compliance Agent Dockerfile for Remote Scanning
+FROM ubuntu:22.04
+
+# Avoid interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    libopenscap8 \
+    libopenscap-dev \
+    python3-openscap \
+    curl \
+    wget \
+    xmlstarlet \
+    unzip \
+    cron \
+    supervisor \
+    git \
+    netcat \
+    && rm -rf /var/lib/apt/lists/*
+
+# Try to install OpenSCAP from source
+RUN echo "Building oscap from source..." && \
+    apt-get update && \
+    apt-get install -y build-essential cmake libxml2-dev libxslt1-dev libcurl4-openssl-dev libbz2-dev pkg-config && \
+    wget https://github.com/OpenSCAP/openscap/archive/refs/tags/1.3.8.tar.gz && \
+    tar -xzf 1.3.8.tar.gz && \
+    cd openscap-1.3.8 && \
+    rm -rf build && mkdir build && cd build && \
+    cmake .. && make -j$(nproc) && make install && \
+    ldconfig && \
+    cd ../.. && rm -rf openscap-1.3.8* 1.3.8.tar.gz && \
+    apt-get remove -y build-essential cmake && \
+    apt-get autoremove -y && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create a simple oscap wrapper if the binary doesn't exist
+RUN if ! command -v oscap >/dev/null 2>&1; then \
+        echo '#!/bin/bash' > /usr/local/bin/oscap && \
+        echo 'echo "OpenSCAP command line tool not available. Using python3-openscap library."' >> /usr/local/bin/oscap && \
+        echo 'exit 1' >> /usr/local/bin/oscap && \
+        chmod +x /usr/local/bin/oscap; \
+    fi
+
+# Create application directory
+WORKDIR /app
+
+# Create compliance user
+RUN groupadd -r compliance && useradd -r -g compliance -d /app -s /bin/bash compliance
+
+# Copy requirements for agent
+COPY agent/requirements.txt /app/requirements.txt
+
+# Create virtual environment and install Python dependencies
+RUN python3 -m venv /app/venv && \
+    /app/venv/bin/pip install --upgrade pip && \
+    /app/venv/bin/pip install --no-cache-dir -r requirements.txt
+
+# Copy agent source code
+COPY agent/src/ /app/src/
+COPY agent/config/ /app/config/
+COPY agent/scripts/ /app/scripts/
+
+# Create necessary directories
+RUN mkdir -p /app/logs /app/results /app/keys /app/content && \
+    chown -R compliance:compliance /app
+
+# Copy SCAP content and download additional content
+RUN mkdir -p /app/content && \
+    wget -O /tmp/scap-security-guide.zip https://github.com/ComplianceAsCode/content/releases/download/v0.1.69/scap-security-guide-0.1.69.zip && \
+    unzip /tmp/scap-security-guide.zip -d /tmp/ && \
+    find /tmp -name "*.xml" -type f -exec cp {} /app/content/ \; && \
+    rm -rf /tmp/scap-security-guide* && \
+    chown -R compliance:compliance /app/content
+
+# Copy entrypoint script
+COPY agent/docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Copy supervisor configuration
+COPY agent/docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose health check port
+EXPOSE 8080
+
+# Set user
+USER compliance
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Start supervisor to manage services
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database - already running
+  postgres:
+    image: postgres:15-alpine
+    container_name: compliance-postgres
+    environment:
+      POSTGRES_DB: compliance_db
+      POSTGRES_USER: compliance
+      POSTGRES_PASSWORD: compliance_secure_db_password_2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    ports:
+      - "5440:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_db -h localhost -p 5432"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # FastAPI Application
+  compliance-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: compliance-api
+    environment:
+      DATABASE_URL: postgresql://compliance:compliance_secure_db_password_2024@postgres:5432/compliance_db
+      JWT_PRIVATE_KEY_PATH: /app/keys/private_unencrypted.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public_unencrypted.pem
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LOG_LEVEL: INFO
+      LOG_FORMAT: json
+    volumes:
+      - ./keys:/app/keys:ro
+      - compliance_logs:/app/logs
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: compliance-prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - compliance-network
+    restart: unless-stopped
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: compliance-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin_password_2024
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - compliance-network
+    restart: unless-stopped
+    depends_on:
+      compliance-api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  prometheus_data:
+  grafana_data:
+  compliance_logs:
+
+networks:
+  compliance-network:
+    driver: bridge                                    

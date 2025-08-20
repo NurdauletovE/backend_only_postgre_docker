@@ -15,7 +15,7 @@ services:
       - ./src/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./config/postgres/setup-auth.sh:/docker-entrypoint-initdb.d/02-setup-auth.sh:ro
     ports:
-      - "5440:5432"
+      - "5441:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U compliance -d compliance_db -h localhost -p 5432"]
       interval: 5s
@@ -52,42 +52,27 @@ services:
     networks:
       - compliance-network
 
-  # Compliance Agent Application - WAITS FOR DATABASE
-  compliance-agent:
+  # FastAPI Application - Lightweight API service
+  compliance-api:
     build:
       context: .
-      dockerfile: Dockerfile
-    container_name: compliance-agent
+      dockerfile: Dockerfile.api
+    container_name: compliance-api
     environment:
       # Database Configuration
       DATABASE_URL: postgresql://compliance:${POSTGRES_PASSWORD:-compliance_secure_db_password_2024}@postgres:5432/compliance_db
-      AUTO_MIGRATE: "false"  # Schema already initialized
       
       # JWT Configuration
-      JWT_PRIVATE_KEY_PATH: /app/keys/private.pem
-      JWT_PUBLIC_KEY_PATH: /app/keys/public.pem
+      JWT_PRIVATE_KEY_PATH: /app/keys/private_unencrypted.pem
+      JWT_PUBLIC_KEY_PATH: /app/keys/public_unencrypted.pem
       JWT_ALGORITHM: RS256
       JWT_ISSUER: compliance-agent
       JWT_AUDIENCE: compliance-authority
-      KEY_PASSPHRASE: ${JWT_KEY_PASSPHRASE:-compliance_secure_key_2024}
-      
-      # OpenSCAP Configuration
-      OPENSCAP_CONTENT_PATH: /usr/share/xml/scap/ssg/content/
-      DEFAULT_SCAN_PROFILE: xccdf_org.ssgproject.content_profile_cis
-      DEFAULT_DATASTREAM: ssg-debian12-ds.xml
-      
-      # Scheduling Configuration
-      SCAN_INTERVAL: 3600
-      MAX_CONCURRENT_SCANS: 3
       
       # API Configuration
       API_HOST: 0.0.0.0
       API_PORT: 8000
-      API_CORS_ORIGINS: "https://compliance.example.com"
-      
-      # Monitoring Configuration
-      PROMETHEUS_PORT: 9090
-      ENABLE_METRICS: "true"
+      API_CORS_ORIGINS: "*"
       
       # Logging Configuration
       LOG_LEVEL: INFO
@@ -100,26 +85,22 @@ services:
     volumes:
       - ./keys:/app/keys:ro
       - compliance_logs:/app/logs
-      - compliance_results:/app/scan_results
     ports:
-      - "8002:8000"   # API port
-      - "9092:9090"   # Prometheus metrics port
+      - "8003:8000"   # API port
     depends_on:
       postgres:
         condition: service_healthy
-      db-init-check:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s  # Give more time for startup
+      start_period: 30s
     networks:
       - compliance-network
     restart: unless-stopped
 
-  # Prometheus for metrics collection - WAITS FOR COMPLIANCE AGENT
+  # Prometheus for metrics collection - WAITS FOR API SERVICE
   prometheus:
     image: prom/prometheus:latest
     container_name: compliance-prometheus
@@ -134,9 +115,9 @@ services:
       - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9096:9090"
+      - "9097:9090"
     depends_on:
-      compliance-agent:
+      compliance-api:
         condition: service_healthy
     networks:
       - compliance-network
@@ -155,7 +136,7 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3003:3000"
+      - "3004:3000"
     depends_on:
       prometheus:
         condition: service_started

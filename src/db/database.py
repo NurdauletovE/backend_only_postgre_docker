@@ -24,19 +24,35 @@ class ComplianceDatabase:
         self.pool_max_size = pool_max_size
         self.pool = None
     
-    async def initialize(self):
-        """Initialize database connection pool"""
-        try:
-            self.pool = await asyncpg.create_pool(
-                self.connection_string,
-                min_size=self.pool_min_size,
-                max_size=self.pool_max_size,
-                command_timeout=60
-            )
-            logger.info("Database connection pool initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize database pool: {e}")
-            raise
+    async def initialize(self, max_retries: int = 5, retry_delay: int = 5):
+        """Initialize database connection pool with retry logic
+        
+        Args:
+            max_retries: Maximum number of connection attempts
+            retry_delay: Delay between retries in seconds
+        """
+        import asyncio
+        
+        for attempt in range(max_retries):
+            try:
+                self.pool = await asyncpg.create_pool(
+                    self.connection_string,
+                    min_size=self.pool_min_size,
+                    max_size=self.pool_max_size,
+                    command_timeout=60
+                )
+                logger.info("Database connection pool initialized")
+                return
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(
+                        f"Database init attempt {attempt + 1}/{max_retries} failed: {e}. "
+                        f"Retrying in {retry_delay} seconds..."
+                    )
+                    await asyncio.sleep(retry_delay)
+                else:
+                    logger.error(f"Failed to initialize database pool after {max_retries} attempts: {e}")
+                    raise
     
     async def close(self):
         """Close database connection pool"""

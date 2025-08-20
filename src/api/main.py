@@ -2,12 +2,13 @@ from fastapi import FastAPI, HTTPException, Depends, Security, Request
 from contextlib import asynccontextmanager
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 import jwt
 import logging
 import time
+import os
 from datetime import datetime, timezone
 
 from db.database import ComplianceDatabase, ComplianceQueries
@@ -22,8 +23,16 @@ async def lifespan(app: FastAPI):
     """Handle application startup and shutdown"""
     # Startup
     logger.info("Starting Compliance Agent API")
-    # Services would be initialized here with proper configuration
+    
+    # Initialize services during lifespan startup
+    try:
+        await initialize_api()
+        logger.info("API services initialized during lifespan")
+    except Exception as e:
+        logger.error(f"Failed to initialize API services during lifespan: {e}")
+    
     yield
+    
     # Shutdown
     logger.info("Shutting down Compliance Agent API")
     
@@ -120,9 +129,10 @@ async def add_request_id(request: Request, call_next):
 
 
 # CORS middleware
+cors_origins = os.getenv('API_CORS_ORIGINS', 'http://localhost:3000').split(',')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://compliance.example.com"],  # Configure as needed
+    allow_origins=cors_origins,  # Configured from environment
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
@@ -426,6 +436,66 @@ async def get_agent_status(_user: Dict = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/metrics", response_class=PlainTextResponse)
+async def get_metrics():
+    """Prometheus metrics endpoint"""
+    try:
+        # Basic application metrics
+        metrics = []
+        
+        # API health metrics
+        metrics.append("# HELP compliance_api_health API health status (1=healthy, 0=unhealthy)")
+        metrics.append("# TYPE compliance_api_health gauge")
+        
+        try:
+            # Check database health
+            db_healthy = 0
+            if database and database.pool:
+                try:
+                    async with database.get_connection() as conn:
+                        await conn.fetchval("SELECT 1")
+                    db_healthy = 1
+                except Exception:
+                    pass
+            
+            metrics.append(f'compliance_api_health{{component="database"}} {db_healthy}')
+            metrics.append(f'compliance_api_health{{component="api"}} 1')
+            
+        except Exception:
+            metrics.append(f'compliance_api_health{{component="api"}} 0')
+        
+        # Add timestamp
+        metrics.append("# HELP compliance_api_last_scrape_timestamp Last time metrics were scraped")
+        metrics.append("# TYPE compliance_api_last_scrape_timestamp counter")
+        metrics.append(f"compliance_api_last_scrape_timestamp {time.time()}")
+        
+        # If database is available, add some compliance metrics
+        if database and database.pool:
+            try:
+                async with database.get_connection() as conn:
+                    # Count total scans
+                    total_scans = await conn.fetchval("SELECT COUNT(*) FROM compliance_scans")
+                    metrics.append("# HELP compliance_total_scans Total number of compliance scans")
+                    metrics.append("# TYPE compliance_total_scans counter")
+                    metrics.append(f"compliance_total_scans {total_scans}")
+                    
+                    # Count total systems
+                    total_systems = await conn.fetchval("SELECT COUNT(*) FROM systems")
+                    metrics.append("# HELP compliance_total_systems Total number of registered systems")
+                    metrics.append("# TYPE compliance_total_systems gauge")
+                    metrics.append(f"compliance_total_systems {total_systems}")
+                    
+            except Exception as e:
+                logger.debug(f"Could not fetch database metrics: {e}")
+        
+        return "\n".join(metrics) + "\n"
+        
+    except Exception as e:
+        logger.error(f"Error generating metrics: {e}")
+        # Return basic error metric
+        return f"# Error generating metrics\nCompliance_api_error 1\n"
+
+
 # Exception handlers
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -460,14 +530,48 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 
 # Initialize function for external use
-async def initialize_api(db: ComplianceDatabase, 
-                        attestation: ComplianceAttestation,
-                        agent: ComplianceAgent):
+async def initialize_api(db: Optional[ComplianceDatabase] = None, 
+                        attestation: Optional[ComplianceAttestation] = None,
+                        agent: Optional[ComplianceAgent] = None):
     """Initialize API with required services"""
     global database, attestation_service, compliance_agent
     
-    database = db
-    attestation_service = attestation
+    # Initialize database if not provided
+    if db is None:
+        database_url = os.getenv('DATABASE_URL')
+        if database_url:
+            try:
+                database = ComplianceDatabase(database_url)
+                await database.initialize()
+                logger.info("Database initialized successfully")
+            except Exception as e:
+                logger.error(f"Failed to initialize database: {e}")
+                database = None
+        else:
+            logger.warning("No DATABASE_URL provided, database features will be disabled")
+            database = None
+    else:
+        database = db
+    
+    # Initialize attestation service if not provided
+    if attestation is None:
+        try:
+            private_key_path = os.getenv('JWT_PRIVATE_KEY_PATH', '/app/keys/private_unencrypted.pem')
+            public_key_path = os.getenv('JWT_PUBLIC_KEY_PATH', '/app/keys/public_unencrypted.pem')
+            
+            if os.path.exists(private_key_path) and os.path.exists(public_key_path):
+                attestation_service = ComplianceAttestation(private_key_path, public_key_path)
+                logger.info("Attestation service initialized successfully")
+            else:
+                logger.warning(f"JWT key files not found: {private_key_path}, {public_key_path}")
+                attestation_service = None
+        except Exception as e:
+            logger.error(f"Failed to initialize attestation service: {e}")
+            attestation_service = None
+    else:
+        attestation_service = attestation
+    
+    # Set compliance agent (optional for API-only mode)
     compliance_agent = agent
     
     logger.info("API services initialized")

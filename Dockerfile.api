@@ -1,0 +1,56 @@
+# Lightweight FastAPI Dockerfile
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    postgresql-client \
+    netcat-openbsd \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create application directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+# Copy application code
+COPY src/ ./src/
+COPY keys/ ./keys/
+
+# Create necessary directories
+RUN mkdir -p /app/logs && \
+    chown -R appuser:appuser /app
+
+# Copy API entrypoint script
+COPY docker/api-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Switch to non-root user
+USER appuser
+
+# Expose API port
+EXPOSE 8000
+
+# Set Python path
+ENV PYTHONPATH=/app/src
+
+# Use entrypoint script
+ENTRYPOINT ["/entrypoint.sh"]
+
+# Default command
+CMD ["python", "/app/src/api_main.py"]

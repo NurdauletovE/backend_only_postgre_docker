@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set timeout 30
+spawn scp compliance_agent_package.tar.gz agent@10.2.246.153:/tmp/
+expect "password:"
+send "123123\r"
+expect eof

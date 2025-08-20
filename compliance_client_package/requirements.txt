@@ -1,0 +1,18 @@
+# Compliance Client Requirements
+# These packages are required to run the compliance client
+
+# Core HTTP libraries
+requests==2.31.0
+
+# JWT token handling
+PyJWT==2.7.0
+
+# Cryptography for JWT validation
+cryptography==41.0.7
+
+# Optional: Async HTTP support (for async client)
+# aiohttp>=3.8.0
+# aiofiles>=0.8.0
+
+# Note: aiohttp and aiofiles are only required if using the async compliance_client.py
+# For simple_compliance_client.py and compliance_cli.py, only the above packages are needed

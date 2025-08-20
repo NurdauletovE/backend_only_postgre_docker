@@ -85,12 +85,18 @@ coverage.xml
 .dmypy.json
 dmypy.json
 
-# Security
+# Security - CRITICAL: Never commit these
+secrets/
 *.pem
 *.key
 *.crt
 *.p12
 *.pfx
+keys/private*.pem
+keys/*.key
+.env.production
+postgres_password.txt
+grafana_password.txt
 
 # OpenSCAP results (can be regenerated)
 *.xml.result.xml

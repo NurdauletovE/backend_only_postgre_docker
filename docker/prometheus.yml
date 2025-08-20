@@ -13,10 +13,10 @@ alerting:
           # - alertmanager:9093
 
 scrape_configs:
-  # Compliance Agent Metrics
-  - job_name: 'compliance-agent'
+  # Compliance API Metrics
+  - job_name: 'compliance-api'
     static_configs:
-      - targets: ['compliance-agent:9090']
+      - targets: ['compliance-api:8000']
     scrape_interval: 30s
     metrics_path: /metrics
     scheme: http
